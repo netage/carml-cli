@@ -1,0 +1,7 @@
+/target/
+/.settings/
+/.project
+/.classpath
+eCH0071.mapping.ttl
+eCH0071.xml
+output.ttl
