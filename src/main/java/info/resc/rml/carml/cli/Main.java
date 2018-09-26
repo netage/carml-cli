@@ -34,8 +34,9 @@ public class Main
 	public static String outputFile = "";
 	public static String mappingFile = "";
 	public static String inputFile = "";
+	public static String inputFolder = "";
 
-	public static void main( String[] args ) throws ParseException, FileNotFoundException
+	public static void main( String[] args ) throws Exception
 	{
 		CommandLineParser cliParser = new DefaultParser();
 		commandLine = cliParser.parse(generateCLIOptions(), args);
@@ -55,14 +56,25 @@ public class Main
 		if (commandLine.hasOption("i")) {
 			Main.inputFile = commandLine.getOptionValue("i", "");
 		}
-
-		System.out.println(Main.inputFile);
+		
+		if (commandLine.hasOption("f")) {
+			Main.inputFolder = commandLine.getOptionValue("f", "");
+		}
 
 		Model result = new LinkedHashModel();
 		System.out.println("Start converting...");
-		result.addAll(convertFile(new FileInputStream(Main.inputFile)));
-		System.out.println("print model: ");
-		Rio.write(result, System.out, RDFFormat.TURTLE);
+		if(Main.inputFile.isEmpty()){
+			if(!Main.inputFolder.isEmpty()){
+				System.out.println("Convert folder: "+Main.inputFolder);
+				result.addAll(convertFolder());
+			}else{
+				throw new Exception("No input source provided!");
+			}
+		}else{
+			System.out.println("Convert file: "+Main.inputFile);
+			result.addAll(convertFile(new FileInputStream(Main.inputFile)));
+		}
+		
 		System.out.println("Done converting, print model to file.");
 		try {
 			printModel2File(result);
@@ -71,6 +83,25 @@ public class Main
 			e.printStackTrace();
 		}
 		System.out.println("Conversion Completed!");
+	}
+
+	private static Model convertFolder() {
+		Model result = new LinkedHashModel();
+		File dir = new File(Main.inputFolder);
+		File[] directoryListing = dir.listFiles();
+		
+		if (directoryListing != null) {
+			for(int i=0;i<directoryListing.length;i++){
+				System.out.println("Convert file: " + directoryListing[i].getPath());
+				try {
+					result.addAll(convertFile(new FileInputStream(directoryListing[i].getAbsolutePath())));
+				} catch (FileNotFoundException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
 	}
 
 	public static void printModel2File(Model model) throws IOException{	
@@ -115,6 +146,8 @@ public class Main
 				"the URI of the output file (required)");
 		cliOptions.addOption("i", "input format", true, 
 				"the URI of the input file (optional)");
+		cliOptions.addOption("f", "input folder", true, 
+				"the URI of a folder with input files (optional)");
 		return cliOptions;
 	}
 
