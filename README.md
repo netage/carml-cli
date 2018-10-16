@@ -18,3 +18,8 @@ java -jar cli-0.0.1-SNAPSHOT-jar-with-dependencies.jar -i inputfile.xml -m rml.m
 java -jar cli-0.0.1-SNAPSHOT-jar-with-dependencies.jar -f /folder -m /rml.mapping.ttl -o /output.ttl
 ```
 
+- Adding output format:
+```
+java -jar cli-0.0.1-SNAPSHOT-jar-with-dependencies.jar -f /folder -m /rml.mapping.ttl -o /output.nt -of nt
+```
+
