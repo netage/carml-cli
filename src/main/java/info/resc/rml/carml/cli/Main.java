@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.file.Paths;
+import java.util.Iterator;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
@@ -20,6 +23,8 @@ import org.apache.commons.io.IOUtils;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.rio.RDFParserRegistry;
+import org.eclipse.rdf4j.rio.RDFWriterRegistry;
 import org.eclipse.rdf4j.rio.Rio;
 
 import com.taxonic.carml.engine.RmlMapper;
@@ -35,6 +40,7 @@ public class Main
 	public static String mappingFile = "";
 	public static String inputFile = "";
 	public static String inputFolder = "";
+	public static String outputFormat = "";
 
 	public static void main( String[] args ) throws Exception
 	{
@@ -56,9 +62,13 @@ public class Main
 		if (commandLine.hasOption("i")) {
 			Main.inputFile = commandLine.getOptionValue("i", "");
 		}
-		
+
 		if (commandLine.hasOption("f")) {
 			Main.inputFolder = commandLine.getOptionValue("f", "");
+		}
+
+		if (commandLine.hasOption("of")) {
+			Main.outputFormat = commandLine.getOptionValue("of", "nt");
 		}
 
 		Model result = new LinkedHashModel();
@@ -68,13 +78,13 @@ public class Main
 				System.out.println("Convert folder: "+Main.inputFolder);
 				result.addAll(convertFolder());
 			}else{
-				throw new Exception("No input source provided!");
+				result.addAll(convertFile(null, false));
 			}
 		}else{
 			System.out.println("Convert file: "+Main.inputFile);
-			result.addAll(convertFile(new FileInputStream(Main.inputFile)));
+			result.addAll(convertFile(new FileInputStream(Main.inputFile), true));
 		}
-		
+
 		System.out.println("Done converting, print model to file.");
 		try {
 			printModel2File(result);
@@ -89,12 +99,12 @@ public class Main
 		Model result = new LinkedHashModel();
 		File dir = new File(Main.inputFolder);
 		File[] directoryListing = dir.listFiles();
-		
+
 		if (directoryListing != null) {
 			for(int i=0;i<directoryListing.length;i++){
 				System.out.println("Convert file: " + directoryListing[i].getPath());
 				try {
-					result.addAll(convertFile(new FileInputStream(directoryListing[i].getAbsolutePath())));
+					result.addAll(convertFile(new FileInputStream(directoryListing[i].getAbsolutePath()), true));
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -104,9 +114,35 @@ public class Main
 		return result;
 	}
 
+	private static RDFFormat determineRdfFormat() {
+		if(Main.outputFormat.toLowerCase().equals("ttl"))
+			return RDFFormat.TURTLE;
+		else if(Main.outputFormat.toLowerCase().equals("nt"))
+			return RDFFormat.NTRIPLES;
+		else if(Main.outputFormat.toLowerCase().equals("nq"))
+			return RDFFormat.NQUADS;
+		else if(Main.outputFormat.toLowerCase().equals("rdf"))
+			return RDFFormat.RDFXML;
+		else if(Main.outputFormat.toLowerCase().equals("jsonld"))
+			return RDFFormat.JSONLD;
+		else if(Main.outputFormat.toLowerCase().equals("trig"))
+			return RDFFormat.TRIG;
+		else if(Main.outputFormat.toLowerCase().equals("n3"))
+			return RDFFormat.N3;
+		else if(Main.outputFormat.toLowerCase().equals("trix"))
+			return RDFFormat.TRIX;
+		else if(Main.outputFormat.toLowerCase().equals("brf"))
+			return RDFFormat.BINARY;
+		else if(Main.outputFormat.toLowerCase().equals("rj"))
+			return RDFFormat.RDFJSON;
+		else
+			return RDFFormat.TURTLE;
+	}
+
 	public static void printModel2File(Model model) throws IOException{	
 		StringWriter outString = new StringWriter();
-		Rio.write(model, outString, RDFFormat.TURTLE);
+
+		Rio.write(model, outString, determineRdfFormat());
 
 		File file = new File(Main.outputFile);
 		file.createNewFile();
@@ -118,8 +154,8 @@ public class Main
 		fileWriter.close();
 	}
 
-	private static Model convertFile(InputStream inputStream){
-		
+	private static Model convertFile(InputStream inputStream, boolean useStream){
+
 		Set<TriplesMap> mapping =
 				RmlMappingLoader
 				.build()
@@ -129,7 +165,9 @@ public class Main
 				.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
 				.build();
 
-		mapper.bindInputStream(inputStream);
+		if(useStream){
+			mapper.bindInputStream(inputStream);
+		}
 
 		return mapper.map(mapping);
 	}
@@ -148,6 +186,8 @@ public class Main
 				"the URI of the input file (optional)");
 		cliOptions.addOption("f", "input folder", true, 
 				"the URI of a folder with input files (optional)");
+		cliOptions.addOption("of", "output format", true, 
+				"The rdf format used for the output (optional)");
 		return cliOptions;
 	}
 
