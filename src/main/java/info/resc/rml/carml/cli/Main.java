@@ -3,6 +3,7 @@ package info.resc.rml.carml.cli;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,6 +12,7 @@ import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
@@ -20,6 +22,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -52,6 +55,10 @@ public class Main
 			Main.displayHelp();
 		}
 
+		if (commandLine.hasOption("version")) {
+			Main.displayVersion();
+		}
+
 		if (commandLine.hasOption("o")) {
 			Main.outputFile = commandLine.getOptionValue("o", "output.ttl");
 		}
@@ -71,14 +78,17 @@ public class Main
 		if (commandLine.hasOption("of")) {
 			Main.outputFormat = commandLine.getOptionValue("of", "ttl");
 		}
-		
+
 		if (commandLine.hasOption("mf")) {
 			Main.mappingFormat = commandLine.getOptionValue("mf", "ttl");
-		}
+		}		
 
 		File file = new File(Main.outputFile);
+		if(file.exists()){
+			file.delete();
+		}
 		file.createNewFile();
-		
+
 		System.out.println("Start converting...");
 		if(Main.inputFile.isEmpty()){
 			if(!Main.inputFolder.isEmpty()){
@@ -91,7 +101,7 @@ public class Main
 			System.out.println("Convert file: "+Main.inputFile);
 			convertFile(new FileInputStream(Main.inputFile), true, file);
 		}
-		
+
 		System.out.println("Conversion Completed!");
 	}
 
@@ -148,7 +158,7 @@ public class Main
 		if(useStream){
 			mapper.bindInputStream(inputStream);
 		}
-		
+
 		try {
 			printModel2File(mapper.map(mapping), file);
 		} catch (IOException e) {
@@ -175,12 +185,22 @@ public class Main
 				"The rdf format used for the output (optional)");
 		cliOptions.addOption("mf", "mapping format", true, 
 				"The rdf format used for the mapping (optional)");
+		cliOptions.addOption("v", "version", false, 
+				"Version of the carml-cli");
 		return cliOptions;
 	}
 
 	public static void displayHelp() {
 		HelpFormatter formatter = new HelpFormatter();
 		formatter.printHelp("Caramel CLI interface", generateCLIOptions());
+		System.exit(1);
+	}
+
+	public static void displayVersion() throws IOException {
+		InputStream resourceAsStream = Main.class.getResourceAsStream("/META-INF/maven/info.resc.rml.carml/cli/pom.properties");
+		Properties prop = new Properties();
+		prop.load(resourceAsStream);
+		System.out.println(prop.getProperty("artifactId") + "-" + prop.getProperty("version"));
 		System.exit(1);
 	}
 }
