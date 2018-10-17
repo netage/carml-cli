@@ -41,6 +41,7 @@ public class Main
 	public static String inputFile = "";
 	public static String inputFolder = "";
 	public static String outputFormat = "";
+	public static String mappingFormat = "";
 
 	public static void main( String[] args ) throws Exception
 	{
@@ -68,35 +69,33 @@ public class Main
 		}
 
 		if (commandLine.hasOption("of")) {
-			Main.outputFormat = commandLine.getOptionValue("of", "nt");
+			Main.outputFormat = commandLine.getOptionValue("of", "ttl");
+		}
+		
+		if (commandLine.hasOption("mf")) {
+			Main.mappingFormat = commandLine.getOptionValue("mf", "ttl");
 		}
 
-		Model result = new LinkedHashModel();
+		File file = new File(Main.outputFile);
+		file.createNewFile();
+		
 		System.out.println("Start converting...");
 		if(Main.inputFile.isEmpty()){
 			if(!Main.inputFolder.isEmpty()){
 				System.out.println("Convert folder: "+Main.inputFolder);
-				result.addAll(convertFolder());
+				convertFolder(file);
 			}else{
-				result.addAll(convertFile(null, false));
+				convertFile(null, false, file);
 			}
 		}else{
 			System.out.println("Convert file: "+Main.inputFile);
-			result.addAll(convertFile(new FileInputStream(Main.inputFile), true));
+			convertFile(new FileInputStream(Main.inputFile), true, file);
 		}
-
-		System.out.println("Done converting, print model to file.");
-		try {
-			printModel2File(result);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		
 		System.out.println("Conversion Completed!");
 	}
 
-	private static Model convertFolder() {
-		Model result = new LinkedHashModel();
+	private static void convertFolder(File file) {
 		File dir = new File(Main.inputFolder);
 		File[] directoryListing = dir.listFiles();
 
@@ -104,62 +103,43 @@ public class Main
 			for(int i=0;i<directoryListing.length;i++){
 				System.out.println("Convert file: " + directoryListing[i].getPath());
 				try {
-					result.addAll(convertFile(new FileInputStream(directoryListing[i].getAbsolutePath()), true));
+					convertFile(new FileInputStream(directoryListing[i].getAbsolutePath()), true, file);
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
 		}
-		return result;
 	}
 
-	private static RDFFormat determineRdfFormat() {
-		if(Main.outputFormat.toLowerCase().equals("ttl"))
-			return RDFFormat.TURTLE;
-		else if(Main.outputFormat.toLowerCase().equals("nt"))
-			return RDFFormat.NTRIPLES;
-		else if(Main.outputFormat.toLowerCase().equals("nq"))
-			return RDFFormat.NQUADS;
-		else if(Main.outputFormat.toLowerCase().equals("rdf"))
-			return RDFFormat.RDFXML;
-		else if(Main.outputFormat.toLowerCase().equals("jsonld"))
-			return RDFFormat.JSONLD;
-		else if(Main.outputFormat.toLowerCase().equals("trig"))
-			return RDFFormat.TRIG;
-		else if(Main.outputFormat.toLowerCase().equals("n3"))
-			return RDFFormat.N3;
-		else if(Main.outputFormat.toLowerCase().equals("trix"))
-			return RDFFormat.TRIX;
-		else if(Main.outputFormat.toLowerCase().equals("brf"))
-			return RDFFormat.BINARY;
-		else if(Main.outputFormat.toLowerCase().equals("rj"))
-			return RDFFormat.RDFJSON;
-		else
-			return RDFFormat.TURTLE;
+	private static RDFFormat determineRdfFormat(String givenFormat) {
+		Iterator<RDFFormat> formats = RDFWriterRegistry.getInstance().getKeys().iterator();
+		while(formats.hasNext()){
+			RDFFormat format = formats.next();
+			if(format.hasDefaultFileExtension(givenFormat)){
+				return format;
+			}
+		}
+		return RDFFormat.TURTLE;
 	}
 
-	public static void printModel2File(Model model) throws IOException{	
+	public static void printModel2File(Model model, File file) throws IOException{	
 		StringWriter outString = new StringWriter();
 
-		Rio.write(model, outString, determineRdfFormat());
+		Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
 
-		File file = new File(Main.outputFile);
-		file.createNewFile();
-
-
-		FileWriter fileWriter = new FileWriter(file, false);
+		FileWriter fileWriter = new FileWriter(file, true);
 		fileWriter.write(outString.toString());
 		fileWriter.flush();
 		fileWriter.close();
 	}
 
-	private static Model convertFile(InputStream inputStream, boolean useStream){
+	private static void convertFile(InputStream inputStream, boolean useStream, File file){
 
 		Set<TriplesMap> mapping =
 				RmlMappingLoader
 				.build()
-				.load(Paths.get(Main.mappingFile), RDFFormat.TURTLE);
+				.load(Paths.get(Main.mappingFile), determineRdfFormat(Main.mappingFormat));
 
 		RmlMapper mapper = RmlMapper.newBuilder()
 				.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
@@ -168,8 +148,13 @@ public class Main
 		if(useStream){
 			mapper.bindInputStream(inputStream);
 		}
-
-		return mapper.map(mapping);
+		
+		try {
+			printModel2File(mapper.map(mapping), file);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	private static Options generateCLIOptions() {
@@ -188,6 +173,8 @@ public class Main
 				"the URI of a folder with input files (optional)");
 		cliOptions.addOption("of", "output format", true, 
 				"The rdf format used for the output (optional)");
+		cliOptions.addOption("mf", "mapping format", true, 
+				"The rdf format used for the mapping (optional)");
 		return cliOptions;
 	}
 
