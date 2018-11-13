@@ -36,6 +36,8 @@ import org.eclipse.rdf4j.rio.RDFWriterRegistry;
 import org.eclipse.rdf4j.rio.Rio;
 
 import com.taxonic.carml.engine.RmlMapper;
+import com.taxonic.carml.logical_source_resolver.CsvResolver;
+import com.taxonic.carml.logical_source_resolver.JsonPathResolver;
 import com.taxonic.carml.logical_source_resolver.XPathResolver;
 import com.taxonic.carml.model.TriplesMap;
 import com.taxonic.carml.util.RmlMappingLoader;
@@ -53,6 +55,9 @@ public class Main
 
 	public static void main( String[] args ) throws Exception
 	{
+		System.out.println(System.getProperty("file.encoding"));
+		System.getProperty("file.encoding","UTF-8");
+		System.out.println(System.getProperty("file.encoding"));
 		CommandLineParser cliParser = new DefaultParser();
 		commandLine = cliParser.parse(generateCLIOptions(), args);
 
@@ -110,7 +115,7 @@ public class Main
 		System.out.println("Conversion Completed!");
 	}
 
-	private static void convertFolder(File file) {
+	private static void convertFolder(File file) throws Exception {
 		File dir = new File(Main.inputFolder);
 		File[] directoryListing = dir.listFiles();
 
@@ -142,23 +147,37 @@ public class Main
 		StringWriter outString = new StringWriter();
 
 		Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
-		
+
 		Writer fileWriter = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
 		fileWriter.write(outString.toString());
 		fileWriter.flush();
 		fileWriter.close();
 	}
 
-	private static void convertFile(InputStream inputStream, boolean useStream, File file){
+	private static void convertFile(InputStream inputStream, boolean useStream, File file) throws Exception{
 
 		Set<TriplesMap> mapping =
 				RmlMappingLoader
 				.build()
 				.load(Paths.get(Main.mappingFile), determineRdfFormat(Main.mappingFormat));
 
-		RmlMapper mapper = RmlMapper.newBuilder()
-				.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
-				.build();
+		RmlMapper mapper = null;
+
+		if(Main.inputFile.substring(Main.inputFile.length()-4).equals(".xml")){
+			mapper = RmlMapper.newBuilder()
+					.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
+					.build();
+		}else if(Main.inputFile.substring(Main.inputFile.length()-4).equals(".csv")){
+			mapper = RmlMapper.newBuilder()
+					.setLogicalSourceResolver(Rdf.Ql.Csv, new CsvResolver())
+					.build();
+		}else if(Main.inputFile.substring(Main.inputFile.length()-5).equals(".json")){
+			mapper = RmlMapper.newBuilder()
+					.setLogicalSourceResolver(Rdf.Ql.JsonPath, new JsonPathResolver())
+					.build();
+		}else{
+			throw new Exception("Extension is not supported!");
+		}
 
 		if(useStream){
 			mapper.bindInputStream(inputStream);
