@@ -4,8 +4,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
@@ -14,8 +12,6 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.Iterator;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
@@ -24,16 +20,16 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringEscapeUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.rio.RDFParserRegistry;
+import org.eclipse.rdf4j.rio.RDFParser;
+import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterRegistry;
 import org.eclipse.rdf4j.rio.Rio;
+import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
+import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
+import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
 
 import com.taxonic.carml.engine.RmlMapper;
 import com.taxonic.carml.logical_source_resolver.CsvResolver;
@@ -55,9 +51,7 @@ public class Main
 
 	public static void main( String[] args ) throws Exception
 	{
-		System.out.println(System.getProperty("file.encoding"));
 		System.getProperty("file.encoding","UTF-8");
-		System.out.println(System.getProperty("file.encoding"));
 		CommandLineParser cliParser = new DefaultParser();
 		commandLine = cliParser.parse(generateCLIOptions(), args);
 
@@ -146,7 +140,15 @@ public class Main
 	public static void printModel2File(Model model, File file) throws IOException{	
 		StringWriter outString = new StringWriter();
 
-		Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
+		if(determineRdfFormat(Main.outputFormat).toString().contains("JSON-LD")){
+			RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, outString);
+			rdfWriter.getWriterConfig().set(BasicWriterSettings.PRETTY_PRINT, true);
+			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
+			
+			Rio.write(model, rdfWriter);
+		}else{
+			Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
+		}
 
 		Writer fileWriter = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
 		fileWriter.write(outString.toString());
