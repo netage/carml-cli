@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -23,6 +25,7 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Namespace;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -33,6 +36,7 @@ import org.eclipse.rdf4j.rio.Rio;
 import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
 import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
+import org.json.JSONObject;
 
 import com.github.jsonldjava.core.JsonLdOptions;
 import com.github.jsonldjava.core.JsonLdProcessor;
@@ -42,6 +46,7 @@ import com.taxonic.carml.logical_source_resolver.CsvResolver;
 import com.taxonic.carml.logical_source_resolver.JsonPathResolver;
 import com.taxonic.carml.logical_source_resolver.XPathResolver;
 import com.taxonic.carml.model.TriplesMap;
+import com.taxonic.carml.util.IoUtils;
 import com.taxonic.carml.util.RmlMappingLoader;
 import com.taxonic.carml.vocab.Rdf;
 
@@ -147,16 +152,30 @@ public class Main
 		StringWriter outString = new StringWriter();
 
 		if(determineRdfFormat(Main.outputFormat).toString().contains("JSON-LD")){
-			RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, outString);
-			rdfWriter.getWriterConfig().set(BasicWriterSettings.PRETTY_PRINT, true);
-			rdfWriter.getWriterConfig().set(BasicWriterSettings.INLINE_BLANK_NODES, true);
+			StringWriter jsonModel = new StringWriter();
+			RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, jsonModel);
+			//rdfWriter.getWriterConfig().set(BasicWriterSettings.INLINE_BLANK_NODES, true);
 			rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
-			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
-			rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
+			//rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
+			
+			InputStream input = new FileInputStream(Paths.get(Main.mappingFile).toString());
+			Model mappingModel = IoUtils.parse(input, RDFFormat.TURTLE);
+			Iterator<Namespace> namespaces = mappingModel.getNamespaces().iterator();
+			Map<String, String> context = new HashMap<String, String>();
+			
+			while(namespaces.hasNext()){
+				Namespace ns = namespaces.next();
+				context.put(ns.getPrefix(), ns.getName());
+			}
 			
 			Rio.write(model, rdfWriter);
+			
+			Object jsonObject = JsonUtils.fromString(jsonModel.toString());
+			
 			JsonLdOptions options = new JsonLdOptions();
-			outString.append(JsonLdFraming.getPrettyJsonLdString(model));
+			Object compact = JsonLdProcessor.compact(jsonObject, context, options);
+
+			outString.append(new JSONObject(removeIds(JsonUtils.toPrettyString(compact))).toString(4));
 			
 		}else{
 			Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
@@ -164,8 +183,13 @@ public class Main
 
 		Writer fileWriter = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
 		fileWriter.write(outString.toString());
-		fileWriter.flush();
+		fileWriter.flush(); 
 		fileWriter.close();
+	}
+	
+	private static String removeIds(String json) {
+		//System.out.println(json); 
+		return json.replaceAll("\\\"@id\\\"\\s:\\s\\\"_:.*\\\",", "");
 	}
 
 	private static void convertFile(InputStream inputStream, boolean useStream, File file) throws Exception{
