@@ -1,16 +1,19 @@
 package info.resc.rml.carml.cli;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -24,6 +27,10 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Namespace;
 import org.eclipse.rdf4j.model.Statement;
@@ -38,8 +45,11 @@ import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
 import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
 import org.json.JSONObject;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.github.jsonldjava.core.DocumentLoader;
 import com.github.jsonldjava.core.JsonLdOptions;
 import com.github.jsonldjava.core.JsonLdProcessor;
+import com.github.jsonldjava.core.RemoteDocument;
 import com.github.jsonldjava.utils.JsonUtils;
 import com.taxonic.carml.engine.RmlMapper;
 import com.taxonic.carml.logical_source_resolver.CsvResolver;
@@ -59,6 +69,7 @@ public class Main
 	public static String inputFolder = "";
 	public static String outputFormat = "";
 	public static String mappingFormat = "";
+	public static String jsonldContext = "";
 
 	public static void main( String[] args ) throws Exception
 	{
@@ -68,6 +79,10 @@ public class Main
 
 		if (commandLine.hasOption("h")) {
 			Main.displayHelp();
+		}
+		
+		if (commandLine.hasOption("c")) {
+			Main.jsonldContext = commandLine.getOptionValue("c", "");
 		}
 
 		if (commandLine.hasOption("version")) {
@@ -157,26 +172,41 @@ public class Main
 			//rdfWriter.getWriterConfig().set(BasicWriterSettings.INLINE_BLANK_NODES, true);
 			rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
 			//rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
-			
+
 			InputStream input = new FileInputStream(Paths.get(Main.mappingFile).toString());
 			Model mappingModel = IoUtils.parse(input, RDFFormat.TURTLE);
 			Iterator<Namespace> namespaces = mappingModel.getNamespaces().iterator();
-			Map<String, String> context = new HashMap<String, String>();
-			
-			while(namespaces.hasNext()){
-				Namespace ns = namespaces.next();
-				context.put(ns.getPrefix(), ns.getName());
-			}
-			
+
 			Rio.write(model, rdfWriter);
-			
+			final DocumentLoader documentLoader = new DocumentLoader();
 			Object jsonObject = JsonUtils.fromString(jsonModel.toString());
+			Object compact;
+			JSONObject compactJson;
 			
 			JsonLdOptions options = new JsonLdOptions();
-			Object compact = JsonLdProcessor.compact(jsonObject, context, options);
-
-			outString.append(new JSONObject(removeIds(JsonUtils.toPrettyString(compact))).toString(4));
+			if(Main.jsonldContext.isEmpty()){
+				System.out.println("context not specified");
+				Map<String, String> context = new HashMap<String, String>();
+				while(namespaces.hasNext()){
+					Namespace ns = namespaces.next();
+					context.put(ns.getPrefix(), ns.getName());
+				}
+				compact = JsonLdProcessor.compact(jsonObject, context, options);
+				compactJson = new JSONObject(JsonUtils.toPrettyString(compact));
+			}else{
+				System.out.println("context specified");
+				RemoteDocument document = documentLoader.loadDocument(Main.jsonldContext);
+				Object context = document.getDocument();
+				compact = JsonLdProcessor.compact(jsonObject, context, options);
+				compactJson = new JSONObject(JsonUtils.toPrettyString(compact));
+				if(compactJson.has("@context")){
+					compactJson.remove("@context");
+					compactJson.append("@context", document.getDocumentUrl());
+				}
+			}
 			
+			outString.append(new JSONObject(removeIds(compactJson.toString(4))).toString(4));
+
 		}else{
 			Rio.write(model, outString, determineRdfFormat(Main.outputFormat));
 		}
@@ -186,12 +216,34 @@ public class Main
 		fileWriter.flush(); 
 		fileWriter.close();
 	}
-	
+
 	private static String removeIds(String json) {
-		//System.out.println(json); 
-		return json.replaceAll("\\\"@id\\\"\\s:\\s\\\"_:.*\\\",", "");
+		return json.replaceAll("\\\"@id\\\":\\s\\\".*\\\",", "");
 	}
 
+	private static String loadRemoteContext(String url){
+		HttpClient client = HttpClientBuilder.create().build();
+		HttpGet request = new HttpGet(url);
+		StringBuffer result = new StringBuffer();
+		try {
+			HttpResponse response = client.execute(request);
+
+
+			BufferedReader rd = new BufferedReader(
+					new InputStreamReader(response.getEntity().getContent()));
+
+			
+			String line = "";
+			while ((line = rd.readLine()) != null) {
+				result.append(line);
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println(result.toString());
+		return result.toString();
+	}
 	private static void convertFile(InputStream inputStream, boolean useStream, File file) throws Exception{
 
 		Set<TriplesMap> mapping =
@@ -235,6 +287,8 @@ public class Main
 
 		cliOptions.addOption("h", "help", false, 
 				"show this help message");
+		cliOptions.addOption("c", "context", true, 
+				"The URL of a optional remote context.");
 		cliOptions.addOption("m", "mapping document", true, 
 				"the URI of the mapping file (required)");
 		cliOptions.addOption("o", "output file", true, 
