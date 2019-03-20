@@ -154,6 +154,7 @@ public class Main
 
 	private static RDFFormat determineRdfFormat(String givenFormat) {
 		Iterator<RDFFormat> formats = RDFWriterRegistry.getInstance().getKeys().iterator();
+		
 		while(formats.hasNext()){
 			RDFFormat format = formats.next();
 			if(format.hasDefaultFileExtension(givenFormat)){
@@ -166,12 +167,10 @@ public class Main
 	public static void printModel2File(Model model, File file) throws IOException{	
 		StringWriter outString = new StringWriter();
 
-		if(determineRdfFormat(Main.outputFormat).toString().contains("JSON-LD")){
+		if(Main.outputFormat.toString().contains("JSON-LD_light")){
 			StringWriter jsonModel = new StringWriter();
 			RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, jsonModel);
-			//rdfWriter.getWriterConfig().set(BasicWriterSettings.INLINE_BLANK_NODES, true);
 			rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
-			//rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
 
 			InputStream input = new FileInputStream(Paths.get(Main.mappingFile).toString());
 			Model mappingModel = IoUtils.parse(input, RDFFormat.TURTLE);
@@ -185,7 +184,6 @@ public class Main
 			
 			JsonLdOptions options = new JsonLdOptions();
 			if(Main.jsonldContext.isEmpty()){
-				System.out.println("context not specified");
 				Map<String, String> context = new HashMap<String, String>();
 				while(namespaces.hasNext()){
 					Namespace ns = namespaces.next();
@@ -194,7 +192,6 @@ public class Main
 				compact = JsonLdProcessor.compact(jsonObject, context, options);
 				compactJson = new JSONObject(JsonUtils.toPrettyString(compact));
 			}else{
-				System.out.println("context specified");
 				RemoteDocument document = documentLoader.loadDocument(Main.jsonldContext);
 				Object context = document.getDocument();
 				compact = JsonLdProcessor.compact(jsonObject, context, options);
@@ -204,7 +201,6 @@ public class Main
 					compactJson.append("@context", document.getDocumentUrl());
 				}
 			}
-			
 			outString.append(new JSONObject(removeIds(compactJson.toString(4))).toString(4));
 
 		}else{
@@ -218,7 +214,8 @@ public class Main
 	}
 
 	private static String removeIds(String json) {
-		return json.replaceAll("\\\"@id\\\":\\s\\\".*\\\",", "");
+		//System.out.println(json);
+		return json.replaceAll("\\\"@id\\\":\\s\\\".*", "");
 	}
 
 	private static String loadRemoteContext(String url){
