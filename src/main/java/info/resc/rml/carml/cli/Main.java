@@ -11,15 +11,13 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Scanner;
 import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
@@ -33,25 +31,20 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Namespace;
-import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.rio.RDFParser;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterRegistry;
 import org.eclipse.rdf4j.rio.Rio;
-import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
-import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
 import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
 import org.json.JSONObject;
 
-import com.fasterxml.jackson.core.JsonParser;
 import com.github.jsonldjava.core.DocumentLoader;
 import com.github.jsonldjava.core.JsonLdOptions;
 import com.github.jsonldjava.core.JsonLdProcessor;
 import com.github.jsonldjava.core.RemoteDocument;
 import com.github.jsonldjava.utils.JsonUtils;
 import com.taxonic.carml.engine.RmlMapper;
+import com.taxonic.carml.engine.RmlMapper.Builder;
 import com.taxonic.carml.logical_source_resolver.CsvResolver;
 import com.taxonic.carml.logical_source_resolver.JsonPathResolver;
 import com.taxonic.carml.logical_source_resolver.XPathResolver;
@@ -80,7 +73,7 @@ public class Main
 		if (commandLine.hasOption("h")) {
 			Main.displayHelp();
 		}
-		
+
 		if (commandLine.hasOption("c")) {
 			Main.jsonldContext = commandLine.getOptionValue("c", "");
 		}
@@ -90,7 +83,7 @@ public class Main
 		}
 
 		if (commandLine.hasOption("o")) {
-			Main.outputFile = commandLine.getOptionValue("o", "output.ttl");
+			Main.outputFile = commandLine.getOptionValue("o", "");
 		}
 
 		if (commandLine.hasOption("m")) {
@@ -111,28 +104,28 @@ public class Main
 
 		if (commandLine.hasOption("mf")) {
 			Main.mappingFormat = commandLine.getOptionValue("mf", "ttl");
-		}		
+		}	
 
-		File file = new File(Main.outputFile);
-		if(file.exists()){
-			file.delete();
+		File file = null;
+		if(!Main.outputFile.isEmpty()) {
+			file = new File(Main.outputFile);
+			if(file.exists()){
+				file.delete();
+			}
+			file.createNewFile();
 		}
-		file.createNewFile();
 
-		System.out.println("Start converting...");
+		//System.out.println("Start converting...");
 		if(Main.inputFile.isEmpty()){
 			if(!Main.inputFolder.isEmpty()){
-				System.out.println("Convert folder: "+Main.inputFolder);
+				//System.out.println("Convert folder: "+Main.inputFolder);
 				convertFolder(file);
 			}else{
 				convertFile(null, false, file);
 			}
 		}else{
-			System.out.println("Convert file: "+Main.inputFile);
 			convertFile(new FileInputStream(Main.inputFile), true, file);
 		}
-
-		System.out.println("Conversion Completed!");
 	}
 
 	private static void convertFolder(File file) throws Exception {
@@ -141,12 +134,14 @@ public class Main
 
 		if (directoryListing != null) {
 			for(int i=0;i<directoryListing.length;i++){
-				System.out.println("Convert file: " + directoryListing[i].getPath());
+				//System.out.println("Convert file: " + directoryListing[i].getPath());
 				try {
 					convertFile(new FileInputStream(directoryListing[i].getAbsolutePath()), true, file);
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
-					e.printStackTrace();
+					// TODO Auto-generated catch block
+					System.err.println(e.toString());
+					//e.printStackTrace();
 				}
 			}
 		}
@@ -154,7 +149,7 @@ public class Main
 
 	private static RDFFormat determineRdfFormat(String givenFormat) {
 		Iterator<RDFFormat> formats = RDFWriterRegistry.getInstance().getKeys().iterator();
-		
+
 		while(formats.hasNext()){
 			RDFFormat format = formats.next();
 			if(format.hasDefaultFileExtension(givenFormat)){
@@ -181,7 +176,7 @@ public class Main
 			Object jsonObject = JsonUtils.fromString(jsonModel.toString());
 			Object compact;
 			JSONObject compactJson;
-			
+
 			JsonLdOptions options = new JsonLdOptions();
 			if(Main.jsonldContext.isEmpty()){
 				Map<String, String> context = new HashMap<String, String>();
@@ -229,53 +224,62 @@ public class Main
 			BufferedReader rd = new BufferedReader(
 					new InputStreamReader(response.getEntity().getContent()));
 
-			
+
 			String line = "";
 			while ((line = rd.readLine()) != null) {
 				result.append(line);
 			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
-			e.printStackTrace();
+			// TODO Auto-generated catch block
+			System.err.println(e.toString());
+			//e.printStackTrace();
 		}
 		System.out.println(result.toString());
 		return result.toString();
 	}
-	private static void convertFile(InputStream inputStream, boolean useStream, File file) throws Exception{
 
+	private static void convertFile(InputStream inputStream, boolean useStream, File file) throws Exception {
 		Set<TriplesMap> mapping =
 				RmlMappingLoader
 				.build()
-				.load(Paths.get(Main.mappingFile), determineRdfFormat(Main.mappingFormat));
+				.load(determineRdfFormat(Main.mappingFormat), Paths.get(Main.mappingFile));
 
-		RmlMapper mapper = null;
+		Builder mapBuilder = RmlMapper.newBuilder()
+				.setLogicalSourceResolver(Rdf.Ql.Csv, new CsvResolver())
+				.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
+				.setLogicalSourceResolver(Rdf.Ql.JsonPath, new JsonPathResolver());
 
-		if(Main.inputFile.substring(Main.inputFile.length()-4).equals(".xml")){
-			mapper = RmlMapper.newBuilder()
-					.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
-					.build();
-		}else if(Main.inputFile.substring(Main.inputFile.length()-4).equals(".csv")){
-			mapper = RmlMapper.newBuilder()
-					.setLogicalSourceResolver(Rdf.Ql.Csv, new CsvResolver())
-					.build();
-		}else if(Main.inputFile.substring(Main.inputFile.length()-5).equals(".json")){
-			mapper = RmlMapper.newBuilder()
-					.setLogicalSourceResolver(Rdf.Ql.JsonPath, new JsonPathResolver())
-					.build();
-		}else{
-			throw new Exception("Extension is not supported!");
-		}
-
-		if(useStream){
+		if(System.in.available() > 0) {
+			RmlMapper mapper = mapBuilder.build();
+			mapper.bindInputStream(System.in);			
+			Model m = mapper.map(mapping);
+			Rio.write(m, System.out, RDFFormat.NQUADS);
+		} else if(useStream){
+			RmlMapper mapper = mapBuilder.build();
 			mapper.bindInputStream(inputStream);
-		}
-
-		try {
-			printModel2File(mapper.map(mapping), file);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+			try {
+				printModel2File(mapper.map(mapping), file);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				System.err.println(e.toString());
+				//e.printStackTrace();
+			}
+		} else {
+			try {
+				if(!Main.inputFile.isEmpty()) {
+					System.out.println("Convert file: "+Main.inputFile);
+				}
+				mapBuilder.fileResolver(Paths.get(Main.inputFile));
+				RmlMapper mapper = mapBuilder.build();
+				printModel2File(mapper.map(mapping), file);
+				System.out.println("Conversion Completed!");
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				System.err.println(e.toString());
+				//e.printStackTrace();
+			}
+		}	
 	}
 
 	private static Options generateCLIOptions() {
