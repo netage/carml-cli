@@ -252,7 +252,7 @@ public class Main
 
 		if(System.in.available() > 0) {
 			RmlMapper mapper = mapBuilder.build();
-			mapper.bindInputStream(System.in);			
+			mapper.bindInputStream("stdin", System.in);			
 			Model m = mapper.map(mapping);
 			Rio.write(m, System.out, RDFFormat.NQUADS);
 		} else if(useStream){
