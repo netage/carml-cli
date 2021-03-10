@@ -267,7 +267,9 @@ public class Main
 			}
 		} else {
 			try {
-				RmlMapper mapper = mapBuilder.build();
+				RmlMapper mapper = mapBuilder
+						.fileResolver(Paths.get(System.getProperty("user.dir")))
+						.build();
 				printModel2File(mapper.map(mapping), file);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
