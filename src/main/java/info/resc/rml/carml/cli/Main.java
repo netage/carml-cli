@@ -118,7 +118,7 @@ public class Main
 		//System.out.println("Start converting...");
 		if(Main.inputFile.isEmpty()){
 			if(!Main.inputFolder.isEmpty()){
-				//System.out.println("Convert folder: "+Main.inputFolder);
+				System.out.println("Convert folder: "+Main.inputFolder);
 				convertFolder(file);
 			}else{
 				convertFile(null, false, file);
@@ -134,7 +134,7 @@ public class Main
 
 		if (directoryListing != null) {
 			for(int i=0;i<directoryListing.length;i++){
-				//System.out.println("Convert file: " + directoryListing[i].getPath());
+				System.out.println("Convert file: " + directoryListing[i].getPath());
 				try {
 					convertFile(new FileInputStream(directoryListing[i].getAbsolutePath()), true, file);
 				} catch (FileNotFoundException e) {
@@ -267,13 +267,8 @@ public class Main
 			}
 		} else {
 			try {
-				if(!Main.inputFile.isEmpty()) {
-					System.out.println("Convert file: "+Main.inputFile);
-				}
-				mapBuilder.fileResolver(Paths.get(Main.inputFile));
 				RmlMapper mapper = mapBuilder.build();
 				printModel2File(mapper.map(mapping), file);
-				System.out.println("Conversion Completed!");
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				System.err.println(e.toString());
