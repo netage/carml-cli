@@ -60,6 +60,7 @@ public class Main
 	public static String mappingFile = "";
 	public static String inputFile = "";
 	public static String inputFolder = "";
+	public static String relPath = "";
 	public static String outputFormat = "";
 	public static String mappingFormat = "";
 	public static String jsonldContext = "";
@@ -96,6 +97,10 @@ public class Main
 
 		if (commandLine.hasOption("f")) {
 			Main.inputFolder = commandLine.getOptionValue("f", "");
+		}
+		
+		if (commandLine.hasOption("rsl")) {
+			Main.relPath = commandLine.getOptionValue("rsl", "");
 		}
 
 		if (commandLine.hasOption("of")) {
@@ -249,14 +254,21 @@ public class Main
 				.setLogicalSourceResolver(Rdf.Ql.Csv, new CsvResolver())
 				.setLogicalSourceResolver(Rdf.Ql.XPath, new XPathResolver())
 				.setLogicalSourceResolver(Rdf.Ql.JsonPath, new JsonPathResolver());
+		
+		 if (!Main.relPath.isEmpty()) {
+			 mapBuilder.fileResolver(Paths.get(Main.relPath));
+		 } else {
+			 mapBuilder.fileResolver(Paths.get(System.getProperty("user.dir")));
+		 }
+		 
+		 RmlMapper mapper = mapBuilder.build();
+		
 
 		if(System.in.available() > 0) {
-			RmlMapper mapper = mapBuilder.build();
 			mapper.bindInputStream("stdin", System.in);			
 			Model m = mapper.map(mapping);
 			Rio.write(m, System.out, RDFFormat.NQUADS);
 		} else if(useStream){
-			RmlMapper mapper = mapBuilder.build();
 			mapper.bindInputStream(inputStream);
 			try {
 				printModel2File(mapper.map(mapping), file);
@@ -267,9 +279,6 @@ public class Main
 			}
 		} else {
 			try {
-				RmlMapper mapper = mapBuilder
-						.fileResolver(Paths.get(System.getProperty("user.dir")))
-						.build();
 				printModel2File(mapper.map(mapping), file);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -293,6 +302,8 @@ public class Main
 				"the URI of the output file (required)");
 		cliOptions.addOption("i", "input format", true, 
 				"the URI of the input file (optional)");
+		cliOptions.addOption("rsl", "relative path", true, 
+				"Specify directory to use to find relative logical source in mapping file (optional)");
 		cliOptions.addOption("f", "input folder", true, 
 				"the URI of a folder with input files (optional)");
 		cliOptions.addOption("of", "output format", true, 
