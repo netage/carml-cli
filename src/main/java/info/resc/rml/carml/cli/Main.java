@@ -99,8 +99,8 @@ public class Main
 			Main.inputFolder = commandLine.getOptionValue("f", "");
 		}
 		
-		if (commandLine.hasOption("rsl")) {
-			Main.relPath = commandLine.getOptionValue("rsl", "");
+		if (commandLine.hasOption("rel")) {
+			Main.relPath = commandLine.getOptionValue("rel", "");
 		}
 
 		if (commandLine.hasOption("of")) {
@@ -302,7 +302,7 @@ public class Main
 				"the URI of the output file (required)");
 		cliOptions.addOption("i", "input format", true, 
 				"the URI of the input file (optional)");
-		cliOptions.addOption("rsl", "relative path", true, 
+		cliOptions.addOption("rel", "relative path", true, 
 				"Specify directory to use to find relative logical source in mapping file (optional)");
 		cliOptions.addOption("f", "input folder", true, 
 				"the URI of a folder with input files (optional)");
